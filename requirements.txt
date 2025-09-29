@@ -1,0 +1,6 @@
+pyboy
+pydantic
+fastapi
+streamlit
+psutil
+requests
