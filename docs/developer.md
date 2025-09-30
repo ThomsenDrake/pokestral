@@ -1,92 +1,284 @@
-# Pokémon Blue AI Agent - Developer Documentation
+# Developer Documentation
 
-## Development Environment Setup
+## Getting Started
 
 ### Prerequisites
-- Python 3.10 or higher
-- Git
-- Docker (for containerized development)
-- VS Code with Python extension
+- Python 3.12+
+- uv package manager (recommended) or pip
+- Valid Pokémon Blue ROM file
 
-### Setup Instructions
+### Environment Setup
+
+#### Using uv (Recommended)
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/pokemon-blue-ai.git
-cd pokemon-blue-ai
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Create virtual environment
+uv venv
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Activate environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+uv pip install -r requirements.txt
 ```
 
-## Coding Standards and Conventions
+#### Using pip
+```bash
+# Create virtual environment
+python -m venv .venv
 
-### Python Style
-- Follow PEP 8 guidelines
-- Use type hints for all functions and methods
-- Docstrings for all public modules, classes, and functions
-- Line length: 100 characters
+# Activate environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-### Git Conventions
-- Feature branches: `feature/description`
-- Bug fixes: `fix/description`
-- Commit messages: Use conventional commits format
+# Install dependencies
+pip install -r requirements.txt
+```
 
-## Testing Procedures
+## Project Structure
 
-### Running Tests
+```
+pokestral/
+├── agent_core/           # Main agent logic and API integration
+│   ├── agent_core.py     # Core agent class and main loop
+│   └── mistral_api.py    # Mistral API client
+├── emulator/            # PyBoy emulator wrapper
+│   └── emulator.py       # Emulator interface and input handling
+├── memory_map/           # Game memory access
+│   └── pokemon_memory_map.py  # RAM addresses and helpers
+├── state_detector/      # Game state detection
+│   └── game_state.py     # State machine and detection logic
+├── prompt_manager/       # Context and prompt management
+│   └── prompt_manager.py  # Prompt construction and history
+├── tools/                # Specialized game tools
+│   ├── battle_helper.py  # Battle strategy
+│   ├── pathfinder.py     # Navigation and pathfinding
+│   └── puzzle_solver.py  # Game puzzle solutions
+├── docs/                 # Documentation files
+├── roms/                 # Game ROMs (not included)
+├── tests/                # Unit and integration tests
+├── screenshots/         # Game screenshots (generated)
+├── checkpoints/          # Game state saves (generated)
+├── main.py              # Main entry point and orchestrator
+├── requirements.txt     # Project dependencies
+├── .env                 # Configuration (not included)
+└── README.md           # Project documentation
+```
+
+## Key Components
+
+### 1. PokemonEmulator Class
+
+Located in `emulator/emulator.py`, this class wraps PyBoy to provide:
+- Visual game window with configurable scaling
+- Input action handling with button press/release methods
+- Memory access through PyBoy's memory view
+- Screenshot capture and saving capabilities
+- Frame management and rate control
+
+**Key Methods:**
+- `__init__()`: Initialize emulator with ROM loading
+- `send_input()`: Send button inputs to the game
+- `get_screenshot()`: Capture current game state as image
+- `tick()`: Advance game by specified number of frames
+
+### 2. AgentCore Class
+
+Located in `agent_core/agent_core.py`, this is the main AI agent controller:
+- Coordinates all system components
+- Implements main game loop logic
+- Handles AI decision making through Mistral API
+- Manages game state detection and action execution
+- Processes AI responses and converts to emulator inputs
+
+**Key Methods:**
+- `__init__()`: Initialize all agent components
+- `run()`: Main agent execution loop
+- `execute_actions()`: Convert AI responses to emulator inputs
+- `main_game_loop()`: Process single iteration of game loop
+
+### 3. MistralAPI Class
+
+Located in `agent_core/mistral_api.py`, handles communication with Mistral:
+- Secure API key management
+- Structured JSON requests and responses
+- Error handling and retry logic
+- Rate limiting compliance
+
+**Key Methods:**
+- `query()`: Send text prompt to Mistral API
+- `chat_completion()`: Create chat completion with JSON mode
+
+## Development Guidelines
+
+### Code Standards
+1. **PEP 8 Compliance**: Follow Python style guide
+2. **Type Hints**: Use type annotations throughout
+3. **Docstrings**: Document all public classes and methods
+4. **Error Handling**: Proper exception handling and logging
+5. **Modularity**: Keep functions focused and reusable
+
+### Testing
 ```bash
 # Run all tests
 pytest tests/
 
-# Run specific test module
-pytest tests/test_game_state.py
-
 # Run with coverage
-pytest --cov=agent_core tests/
+pytest --cov=agent_core --cov=emulator tests/
+
+# Run specific test file
+pytest tests/test_battle_helper.py
+
+# Run tests with verbose output
+pytest -v tests/
 ```
 
-### Test Coverage
-- Minimum coverage requirement: 80%
-- Critical modules require 90% coverage
-- Use pytest-cov for coverage reporting
+### Code Quality
+```bash
+# Format code with black
+black .
 
-## Debugging Guide
+# Sort imports with isort
+isort .
 
-### Common Issues
-1. **Emulator Connection Problems**
-   - Verify ROM file path in config
-   - Check PyBoy version compatibility
+# Check code style with flake8
+flake8 .
 
-2. **Memory Mapping Errors**
-   - Validate memory addresses in `pokemon_memory_map.py`
-   - Use debug mode to log memory access
+# Type checking with mypy
+mypy .
+```
 
-### Debugging Tools
-- VS Code debugger with Python extension
-- Logging module with different verbosity levels
-- Memory visualization tools in dashboard
+## API Integration
 
-## Release Process
+### Mistral API Client
+The `MistralAPI` class in `agent_core/mistral_api.py` provides:
 
-### Versioning Strategy
-- Semantic Versioning (SemVer) 2.0.0
-- Format: `MAJOR.MINOR.PATCH`
-- Pre-releases: `MAJOR.MINOR.PATCH-alpha.beta`
+**Initialization:**
+```python
+api = MistralAPI(api_key="your-api-key")
+```
 
-### Release Checklist
-1. Update version in `pyproject.toml`
-2. Generate changelog from git history
-3. Run full test suite with coverage
-4. Build documentation
-5. Create GitHub release with assets
+**Text Queries:**
+```python
+response = api.query("What should I do next?")
+```
 
-### Deployment Pipeline
-1. Push to main branch triggers CI/CD
-2. Automated tests and coverage check
-3. Build Docker image
-4. Deploy to staging environment
-5. Manual approval for production
+**Structured Responses:**
+The API is configured to return JSON responses for predictable parsing.
+
+### Response Format
+AI responses should follow this JSON structure:
+```json
+{
+  "action": "move_up|move_down|move_left|move_right|open_menu|...",
+  "reason": "Explanation for why this action was chosen"
+}
+```
+
+## Emulator Integration
+
+### Input Handling
+The emulator supports these button actions:
+- Directional: 'up', 'down', 'left', 'right'
+- Action: 'a', 'b', 'start', 'select'
+
+### Memory Access
+Use the `PokemonMemoryMap` class to read game state:
+```python
+memory_map = PokemonMemoryMap()
+party_species = memory_map.get_party_pokemon_species(memory_view)
+player_x, player_y = memory_map.get_player_coordinates(memory_view)
+```
+
+### Screenshot Capture
+Screenshots are automatically saved to the `screenshots/` directory and can be captured manually:
+```python
+emulator.save_screenshot("screenshots/current_state.png")
+```
+
+## State Management
+
+### Game States
+The system detects these game states:
+- `TITLE_SCREEN`: Initial game screen
+- `OVERWORLD`: Normal gameplay
+- `BATTLE`: Pokémon battle
+- `MENU`: Menu navigation
+- `DIALOG`: Text display
+
+### Context Management
+The `PromptManager` handles:
+- Maintaining action history
+- Managing context window size
+- Compressing old information
+- Building structured prompts
+
+## Performance Optimization
+
+### Frame Rate Control
+- Configurable frame skipping for performance
+- Automatic rate limiting to prevent API overload
+- Efficient memory access patterns
+
+### Memory Management
+- Efficient memory view access for real-time detection
+- Caching of frequently accessed game state
+- Lazy loading of non-critical components
+
+### Input Processing
+- Queue-based input handling for smooth gameplay
+- Duration-based button presses for precise control
+- Validation of all input actions before execution
+
+## Troubleshooting
+
+### Common Development Issues
+
+**Module Import Errors**
+```bash
+# Ensure virtual environment is activated
+source .venv/bin/activate
+
+# Reinstall dependencies
+uv pip install -r requirements.txt
+```
+
+**PyBoy Installation Issues**
+```bash
+# Install PyBoy directly
+pip install pyboy
+```
+
+**API Key Problems**
+- Verify `.env` file contains correct `MISTRAL_API_KEY`
+- Check API key permissions in Mistral dashboard
+- Ensure network connectivity to API endpoint
+
+**Emulator Not Responding**
+- Check that ROM file is valid and accessible
+- Verify that emulator window has focus (non-headless mode)
+- Ensure sufficient system resources are available
+
+## Contributing
+
+### Pull Request Process
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with proper documentation
+4. Add/update tests as needed
+5. Run all tests to ensure no regressions
+6. Submit pull request with clear description
+
+### Code Review Guidelines
+- All new functionality must include unit tests
+- Public APIs must be documented with docstrings
+- Code must pass all quality checks (black, isort, flake8, mypy)
+- Changes should maintain backward compatibility when possible
+- Complex logic should be broken into smaller, testable functions
+
+### Testing Requirements
+- Unit tests for all new classes and methods
+- Integration tests for component interactions
+- Performance tests for critical paths
+- Edge case testing for error conditions

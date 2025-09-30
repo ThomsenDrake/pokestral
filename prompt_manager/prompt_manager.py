@@ -67,7 +67,7 @@ class PromptManager:
         summary_parts = [f"{count} x {action}" for action, count in action_counts.items()]
         return ", ".join(summary_parts)
 
-    def construct_prompt(self) -> str:
+    def construct_prompt(self, game_state: str = "overworld") -> str:
         """Construct the prompt for the AI agent."""
         # Build the prompt components
         prompt_parts = []
@@ -91,15 +91,31 @@ class PromptManager:
             for i, summary in enumerate(self.summarized_history[-3:], 1):  # Show last 3 summaries
                 prompt_parts.append(f"{i}. {summary}")
 
-        # Add instructions for output format
+        # Add instructions for output format based on game state
         prompt_parts.append("\nInstructions for Mistral:")
-        prompt_parts.append("Please output your response in JSON format with fields 'action' and 'reason'")
-        prompt_parts.append("Example: {'action': 'move_north', 'reason': 'To reach the next town'}")
+        
+        if game_state == "menu" or game_state == "title" or game_state == "character_creation":
+            prompt_parts.append("You are currently in a menu or character creation screen.")
+            prompt_parts.append("Valid actions: 'menu_up', 'menu_down', 'menu_left', 'menu_right', 'menu_select' (press A), 'menu_back' (press B)")
+            prompt_parts.append("Example: {'action': 'menu_down', 'reason': 'Navigate to next menu option'}")
+            prompt_parts.append("Example: {'action': 'menu_select', 'reason': 'Select highlighted option'}")
+        elif game_state == "battle":
+            prompt_parts.append("You are currently in a battle.")
+            prompt_parts.append("Valid actions: 'fight', 'bag', 'pokemon', 'run', 'select_move:1-4', 'select_pokemon:1-6'")
+            prompt_parts.append("Example: {'action': 'fight', 'reason': 'Choose to fight in battle'}")
+        else:
+            # Default overworld actions
+            prompt_parts.append("You are currently exploring the overworld.")
+            prompt_parts.append("Valid actions: 'move_up', 'move_down', 'move_left', 'move_right', 'interact' (press A), 'open_menu' (press start)")
+            prompt_parts.append("Example: {'action': 'move_up', 'reason': 'Move character upward'}")
 
-        # Add tool invocation support
-        prompt_parts.append("\nTool Invocation:")
-        prompt_parts.append("If you need to use a tool, format your action as 'tool_name:parameters'")
-        prompt_parts.append("Example: 'use_item:potion' to use a potion item")
+        # Add general format instruction
+        prompt_parts.append("Always respond in JSON format with 'action' and 'reason' fields.")
+        
+        # Add context about the Pokemon game
+        prompt_parts.append("\nGame Context: This is Pokemon Blue. Navigate menus and gameplay carefully.")
+        if game_state == "title":
+            prompt_parts.append("Title Screen: Choose 'New Game' or 'Continue'. Select with A button and navigate with D-pad.")
 
         # Join all parts with newlines
         prompt = "\n".join(prompt_parts)
@@ -110,7 +126,7 @@ class PromptManager:
             # Truncate from the history summary if needed
             while len(prompt) > max_length and len(self.summarized_history) > 1:
                 self.summarized_history.pop(0)
-                prompt = self.construct_prompt()
+                prompt = self.construct_prompt(game_state)
 
         return prompt
 

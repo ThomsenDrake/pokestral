@@ -1,255 +1,452 @@
-# Deployment Instructions
+# Deployment Guide
 
-## Overview
+## System Requirements
 
-This guide covers deployment options for the Pokémon Blue AI agent, from local development to production environments.
+### Hardware Requirements
+- **CPU**: Modern processor with good single-thread performance
+- **RAM**: 16GB minimum (32GB recommended for development)
+- **Storage**: 50GB free space (for ROMs, screenshots, logs, checkpoints)
+- **Graphics**: OpenGL 2.1+ compatible GPU (for visual display)
+- **Network**: Stable internet connection for Mistral API access
 
-## Local Deployment
+### Software Requirements
+- **Operating System**: 
+  - Linux (Ubuntu 20.04+, CentOS 8+, etc.)
+  - macOS (10.15+)
+  - Windows (10+, with WSL2 recommended)
+- **Python**: 3.12+
+- **Dependencies**: See `requirements.txt`
 
-### Prerequisites
-- Python 3.10+
-- Git
-- Pokémon Blue ROM
+## Installation
 
-### Steps
+### Production Environment Setup
 
-1. Clone repository:
+#### Using uv (Recommended for Production)
 ```bash
-git clone https://github.com/yourorg/pokemon-blue-agent.git
-cd pokemon-blue-agent
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create production environment
+uv venv --python 3.12
+
+# Activate environment
+source .venv/bin/activate
+
+# Install only runtime dependencies
+uv pip install pyboy pydantic fastapi streamlit psutil requests
 ```
 
-2. Install dependencies:
+#### Using pip (Alternative)
 ```bash
-uv venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Create virtual environment
+python3.12 -m venv .venv
+
+# Activate environment
+source .venv/bin/activate
+
+# Install dependencies
+pip install pyboy pydantic fastapi streamlit psutil requests
+```
+
+### Development Environment Setup
+
+For development and testing:
+```bash
+# Install all dependencies including development tools
 uv pip install -r requirements.txt
+
+# Install pre-commit hooks
+pre-commit install
 ```
 
-3. Configure environment:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
+## Configuration
 
-4. Run agent:
-```bash
-python -m agent_core
-```
-
-## Docker Deployment
-
-### Building Image
-
-```bash
-docker build -t pokemon-agent .
-```
-
-### Running Container
-
-```bash
-docker run -it --rm \
-  -v ./roms:/app/roms \
-  -v ./data:/app/data \
-  -e MISTRAL_API_KEY=your_key \
-  pokemon-agent
-```
-
-### Docker Compose
-
-```yaml
-version: '3'
-services:
-  agent:
-    build: .
-    volumes:
-      - ./roms:/app/roms
-      - ./data:/app/data
-    environment:
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
-    ports:
-      - "8501:8501"  # Dashboard
-```
-
-## Production Deployment
-
-### Recommended Setup
-
-1. **Server Requirements**:
-   - 4+ CPU cores
-   - 16GB RAM
-   - 50GB SSD storage
-
-2. **Process Management**:
-   - Use systemd or Supervisor
-   - Example systemd service:
+### Environment Variables
+Create a `.env` file in the project root:
 
 ```ini
-# /etc/systemd/system/pokemon-agent.service
-[Unit]
-Description=Pokémon Blue AI Agent
-After=network.target
+# Mistral API Configuration
+MISTRAL_API_KEY=your_production_api_key_here
+MISTRAL_MODEL=mistral-medium-latest
 
-[Service]
-User=agent
-WorkingDirectory=/opt/pokemon-agent
-ExecStart=/opt/pokemon-agent/.venv/bin/python -m agent_core
-Restart=always
-EnvironmentFile=/opt/pokemon-agent/.env
+# Game Configuration
+ROM_PATH=/path/to/pokemon-blue-version.gb
+SAVE_STATE_PATH=/path/to/save/states/
 
-[Install]
-WantedBy=multi-user.target
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/pokestral/agent.log
+LOG_MAX_SIZE=100MB
+LOG_BACKUP_COUNT=5
+
+# Performance Configuration
+FRAME_SKIP=1
+MAX_FRAME_SKIPS=60
+SCREENSHOT_INTERVAL=300
+CHECKPOINT_INTERVAL=600
+
+# API Configuration
+API_TIMEOUT=30
+API_RETRY_ATTEMPTS=3
+API_RATE_LIMIT=1000  # requests per hour
 ```
 
-3. **Logging**:
-   - Configure syslog or log rotation
-   - Example logrotate config:
+### Directory Structure
+```
+/var/lib/pokestral/          # Data directory (production)
+├── roms/                     # Game ROMs
+├── screenshots/               # Game screenshots
+├── checkpoints/              # Game state saves
+├── logs/                     # Application logs
+└── config/                   # Configuration files
 
-```conf
-# /etc/logrotate.d/pokemon-agent
-/opt/pokemon-agent/logs/*.log {
+/opt/pokestral/               # Application directory (production)
+├── agent_core/               # Core agent modules
+├── emulator/                # Emulator interface
+├── memory_map/               # Memory mapping
+├── state_detector/           # State detection
+├── prompt_manager/           # Prompt management
+├── tools/                    # Specialized tools
+└── main.py                  # Main entry point
+```
+
+## Running the Agent
+
+### Basic Execution
+```bash
+# Run with default settings
+python main.py
+
+# Run with specific ROM path
+python main.py --rom /path/to/pokemon-blue-version.gb
+
+# Run in headless mode (no visual window)
+python main.py --headless
+
+# Run with debug logging
+python main.py --debug
+```
+
+### Production Deployment
+```bash
+# Run as background service
+nohup python main.py --headless > /var/log/pokestral/agent.log 2>&1 &
+
+# Run with systemd service (recommended)
+sudo systemctl start pokestral-agent
+```
+
+### Command Line Options
+```bash
+usage: main.py [-h] [--rom PATH] [--headless] [--debug] [--config CONFIG]
+
+Pokemon Blue AI Agent
+
+options:
+  -h, --help            show this help message and exit
+  --rom PATH           Path to Pokemon Blue ROM file
+  --headless           Run without visual window
+  --debug              Enable debug logging
+  --config CONFIG      Path to configuration file
+```
+
+## Monitoring and Maintenance
+
+### Health Checks
+```bash
+# Check if agent is running
+ps aux | grep main.py
+
+# Check log files
+tail -f /var/log/pokestral/agent.log
+
+# Monitor system resources
+htop
+```
+
+### Log Analysis
+```bash
+# View recent errors
+grep "ERROR" /var/log/pokestral/agent.log | tail -20
+
+# Monitor API usage
+grep "Mistral API" /var/log/pokestral/agent.log
+
+# Check performance metrics
+grep "Runtime\|FPS" /var/log/pokestral/agent.log
+```
+
+### Performance Tuning
+```bash
+# Adjust frame skip for better performance
+export FRAME_SKIP=2
+
+# Modify screenshot interval to reduce I/O
+export SCREENSHOT_INTERVAL=600
+
+# Tune checkpoint frequency
+export CHECKPOINT_INTERVAL=1200
+```
+
+## Backup and Recovery
+
+### Data Backup Strategy
+```bash
+# Daily backups of checkpoints and saves
+0 2 * * * /opt/pokestral/scripts/backup.sh
+
+# Weekly full backup
+0 3 * * 0 /opt/pokestral/scripts/full_backup.sh
+```
+
+### Checkpoint Management
+```bash
+# List available checkpoints
+ls -la /var/lib/pokestral/checkpoints/
+
+# Restore from checkpoint
+python main.py --checkpoint /var/lib/pokestral/checkpoints/latest.state
+```
+
+### Log Rotation
+Configure logrotate in `/etc/logrotate.d/pokestral`:
+```
+/var/log/pokestral/*.log {
     daily
     missingok
-    rotate 7
+    rotate 52
     compress
     delaycompress
     notifempty
-    copytruncate
+    create 644 pokestral pokestral
+    postrotate
+        systemctl reload pokestral-agent
+    endscript
 }
 ```
 
-## Cloud Deployment
-
-### AWS Example
-
-1. **EC2 Instance**:
-   - t3.xlarge or better
-   - Amazon Linux 2
-   - 50GB GP2 storage
-
-2. **Setup Script**:
-```bash
-#!/bin/bash
-yum update -y
-yum install -y git python3 docker
-usermod -aG docker ec2-user
-systemctl enable docker
-systemctl start docker
-
-git clone https://github.com/yourorg/pokemon-blue-agent.git
-cd pokemon-blue-agent
-# Add your config and ROM
-
-docker build -t pokemon-agent .
-docker run -d --restart always -v $(pwd)/data:/app/data pokemon-agent
-```
-
-### Monitoring
-
-1. **CloudWatch**:
-   - Monitor CPU, memory, disk
-   - Set alerts for failures
-
-2. **Custom Metrics**:
-   - Push agent metrics to CloudWatch
-   - Example:
-
-```python
-import boto3
-
-cloudwatch = boto3.client('cloudwatch')
-cloudwatch.put_metric_data(
-    Namespace='PokemonAgent',
-    MetricData=[{
-        'MetricName': 'ActionsPerMinute',
-        'Value': actions_count,
-        'Unit': 'Count'
-    }]
-)
-```
-
-## Configuration Management
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MISTRAL_API_KEY` | Mistral API key | - |
-| `ROM_PATH` | Path to ROM file | roms/pokemon-blue.gb |
-| `HEADLESS` | Run without display | false |
-| `FAST_FORWARD` | Enable frame skipping | true |
-| `LOG_LEVEL` | Logging level | INFO |
-| `CHECKPOINT_INTERVAL` | Auto-save interval (sec) | 300 |
-
-### Configuration File
-
-Example `config.yaml`:
-```yaml
-agent:
-  fast_forward: true
-  checkpoint_interval: 300
-  max_context_tokens: 8000
-
-mistral:
-  model: mistral-tiny
-  temperature: 0.7
-
-logging:
-  level: INFO
-  file: logs/agent.log
-```
-
-## Scaling
+## Scaling and High Availability
 
 ### Horizontal Scaling
-- Run multiple agents with different strategies
-- Share database with read replicas
-
-### Vertical Scaling
-- Increase instance size for better performance
-- Optimize frame skipping
-
-## Backup Strategy
-
-1. **Database Backups**:
+For running multiple agents:
 ```bash
-sqlite3 agent.db .dump > backups/agent-$(date +%F).sql
+# Agent 1
+python main.py --rom /roms/pokemon1.gb --port 8001
+
+# Agent 2
+python main.py --rom /roms/pokemon2.gb --port 8002
+
+# Agent 3
+python main.py --rom /roms/pokemon3.gb --port 8003
 ```
 
-2. **Checkpoint Backups**:
-```bash
-cp data/checkpoints/* backups/checkpoints/
+### Load Balancing
+Use nginx or HAProxy to distribute API requests:
+```nginx
+upstream mistral_api {
+    server api.mistral.ai:443;
+    keepalive 32;
+}
+
+location /v1 {
+    proxy_pass https://mistral_api;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+}
 ```
 
-3. **Automated Backups**:
-```bash
-#!/bin/bash
-# Daily backup script
-mkdir -p backups/$(date +%F)
-cp -r data backups/$(date +%F)/
-sqlite3 agent.db .dump > backups/$(date +%F)/agent.sql
+### Container Deployment
+Dockerfile for containerized deployment:
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libsdl2-dev \
+    libsdl2-image-dev \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv and dependencies
+COPY requirements.txt .
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+RUN uv pip install -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p /data/screenshots /data/checkpoints /data/logs
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV DATA_DIR=/data
+
+EXPOSE 8000
+
+CMD ["python", "main.py"]
 ```
 
-## Troubleshooting Deployment
+## Security Considerations
 
-**Common Issues:**
+### API Key Management
+```bash
+# Store API keys securely
+chmod 600 /etc/pokestral/.env
+chown pokestral:pokestral /etc/pokestral/.env
 
-1. **ROM not found**:
-   - Verify ROM path in .env
-   - Check file permissions
-   - Confirm ROM checksum
+# Use environment variables instead of hardcoded keys
+export MISTRAL_API_KEY=$(cat /secure/location/api_key)
+```
 
-2. **API connection errors**:
-   - Test network connectivity
-   - Verify API key
-   - Check rate limits
+### Network Security
+```bash
+# Firewall rules
+ufw allow from 10.0.0.0/8 to any port 8000
+ufw deny from any to any port 8000
 
-3. **Performance problems**:
-   - Reduce frame skip
-   - Increase instance size
-   - Optimize memory access
+# SSL/TLS for API endpoints
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ssl/private/pokestral.key \
+    -out /etc/ssl/certs/pokestral.crt
+```
 
-4. **Database corruption**:
-   - Restore from backup
-   - Run `sqlite3 agent.db "VACUUM;"`
-   - Check disk space
+### File Permissions
+```bash
+# Set proper ownership
+chown -R pokestral:pokestral /var/lib/pokestral/
+chmod -R 755 /var/lib/pokestral/
+
+# Secure sensitive files
+chmod 600 /var/lib/pokestral/config/*
+chmod 644 /var/lib/pokestral/roms/*
+```
+
+## Troubleshooting Production Issues
+
+### Common Production Problems
+
+**High Memory Usage**
+```bash
+# Monitor memory usage
+ps aux --sort=-%mem | head -10
+
+# Restart agent to clear memory
+systemctl restart pokestral-agent
+
+# Increase system swap space
+sudo fallocate -l 8G /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+**API Rate Limiting**
+```bash
+# Check current API usage
+grep "rate limit\|429" /var/log/pokestral/agent.log
+
+# Implement exponential backoff
+# Already built into MistralAPI client
+```
+
+**Emulator Crashes**
+```bash
+# Check for segmentation faults
+dmesg | grep segfault
+
+# Enable core dumps for debugging
+ulimit -c unlimited
+
+# Monitor system stability
+journalctl -f
+```
+
+**Disk Space Issues**
+```bash
+# Check disk usage
+df -h
+
+# Clean up old screenshots
+find /var/lib/pokestral/screenshots -name "*.png" -mtime +7 -delete
+
+# Rotate large log files
+logrotate /etc/logrotate.d/pokestral
+```
+
+## Performance Monitoring
+
+### Metrics Collection
+Monitor these key metrics:
+- **Frame Rate**: Target 60 FPS, minimum 30 FPS
+- **API Latency**: Average response time < 2 seconds
+- **Memory Usage**: < 8GB RAM utilization
+- **Disk I/O**: < 100 MB/s sustained writes
+- **Network Usage**: < 1 MB/s API traffic
+
+### Dashboard Integration
+Set up monitoring with Prometheus/Grafana:
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'pokestral'
+    static_configs:
+      - targets: ['localhost:8000']
+```
+
+### Alerting Rules
+Configure alerts for critical issues:
+- Agent downtime > 5 minutes
+- API errors > 10% rate
+- Disk space < 10% remaining
+- Memory usage > 90%
+
+## Updates and Maintenance
+
+### Version Updates
+```bash
+# Backup current installation
+tar -czf pokestral-backup-$(date +%Y%m%d).tar.gz /opt/pokestral
+
+# Update dependencies
+uv pip install --upgrade -r requirements.txt
+
+# Restart services
+systemctl restart pokestral-agent
+```
+
+### Patch Management
+```bash
+# Schedule regular updates
+0 4 * * 0 /opt/pokestral/scripts/update.sh
+
+# Security patch notifications
+# Subscribe to security mailing lists for dependencies
+```
+
+### Rollback Procedures
+```bash
+# In case of failed update
+systemctl stop pokestral-agent
+cp -r /opt/pokestral-backup/* /opt/pokestral/
+systemctl start pokestral-agent
+```
+
+## Compliance and Legal
+
+### ROM Distribution
+- **DO NOT** distribute Pokémon Blue ROMs
+- Users must provide their own legally obtained ROMs
+- Verify ROM checksums against known good values
+
+### API Usage
+- Comply with Mistral API terms of service
+- Monitor and respect rate limits
+- Implement proper error handling and retries
+
+### Data Privacy
+- No personal data collection without consent
+- Secure storage of API keys and credentials
+- Regular security audits of deployed systems

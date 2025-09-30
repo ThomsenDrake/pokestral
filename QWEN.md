@@ -1,8 +1,10 @@
-# Pokémon Blue AI Agent
+# Pokestral - Pokémon Blue AI Agent
 
-A fully autonomous agent that completes Pokémon Blue using the Mistral language model, PyBoy emulator, and specialized tools for gameplay.
+## Project Overview
 
-## 🎉 CURRENT STATUS: **FULLY OPERATIONAL!**
+Pokestral is a fully autonomous AI agent that plays Pokémon Blue from start to finish using the Mistral language model, PyBoy Game Boy emulator, and specialized tools for gameplay automation. The system is designed to complete the game in under 300 hours with >99.5% valid actions while maintaining context length under 10k tokens.
+
+### 🎉 CURRENT STATUS: **FULLY OPERATIONAL!**
 
 The system is now successfully integrated and running! The AI agent:
 - ✅ Loads and runs Pokémon Blue ROM
@@ -11,60 +13,6 @@ The system is now successfully integrated and running! The AI agent:
 - ✅ Receives intelligent responses and executes actions
 - ✅ Takes screenshots and saves game progress
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.12+
-- 16GB RAM recommended
-- Modern CPU with good single-thread performance
-- Stable internet connection for Mistral API access
-- Valid Pokémon Blue ROM (place in `roms/pokemon-blue-version.gb`)
-
-### Installation
-
-#### Using uv (recommended)
-```bash
-# Install uv if you don't have it
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Create virtual environment and install dependencies
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
-```
-
-#### Using pip
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Configuration
-
-1. Create a `.env` file in the project root with the following variables:
-
-```ini
-MISTRAL_API_KEY=your_api_key_here
-ROM_PATH=roms/pokemon-blue-version.gb
-LOG_LEVEL=INFO
-```
-
-2. Ensure you have a valid Pokémon Blue ROM in the `roms/` directory
-
-### Usage
-
-Run the agent with:
-
-```bash
-python main.py [--rom PATH] [--headless] [--debug]
-
-# Examples:
-python main.py --rom ./roms/pokemon-blue-version.gb
-python main.py --headless  # Run without visual window
-python main.py --debug     # Enable debug logging
-```
-
 ## 🏗️ System Architecture
 
 The Pokémon Blue AI Agent consists of several core components that work together to achieve autonomous gameplay:
@@ -72,7 +20,7 @@ The Pokémon Blue AI Agent consists of several core components that work togethe
 ### 1. Emulator Interface (`emulator/`)
 Handles interaction with the PyBoy emulator, including:
 - Game loop management with visual display
-- Frame skipping and rendering optimization
+- Frame skipping and rendering optimization  
 - Input injection using new PyBoy API (button_press/button_release)
 - Memory access and screenshot capture
 - Error handling and graceful shutdown
@@ -122,6 +70,58 @@ Handles communication with Mistral language model:
 - Retry mechanisms for reliability
 - Tool calling convention support
 
+## 🚀 Quick Start Guide
+
+### System Requirements
+- Python 3.12+
+- 16GB RAM recommended
+- Modern CPU with good single-thread performance
+- Stable internet connection for Mistral API access
+
+### Installation
+
+#### Using uv (recommended)
+```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+```
+
+#### Using pip
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Configuration
+
+1. Create a `.env` file in the project root with the following variables:
+
+```ini
+MISTRAL_API_KEY=your_api_key_here
+ROM_PATH=roms/pokemon-blue-version.gb
+LOG_LEVEL=INFO
+```
+
+2. Ensure you have a valid Pokémon Blue ROM in the `roms/` directory
+
+### Running the Agent
+
+```bash
+# Basic usage
+python main.py [--rom PATH] [--headless] [--debug]
+
+# Examples:
+python main.py --rom ./roms/pokemon-blue-version.gb
+python main.py --headless  # Run without visual window
+python main.py --debug     # Enable debug logging
+```
+
 ## 🎮 Key Features
 
 - **Complete Game Automation**: From start to Elite Four victory
@@ -135,39 +135,15 @@ Handles communication with Mistral language model:
 
 ## 📊 Performance Metrics
 
-| Metric | Current Status |
-|--------|----------------|
-| Game completion time | Running successfully |
-| Valid action rate | High accuracy with proper button input |
-| Context length | Managed under 10k tokens |
-| Continuous runtime | Stable operation |
-| State detection accuracy | Working with memory mapping |
+| Metric | Target | Current Status |
+|--------|--------|----------------|
+| Game completion time | < 300 hours | Running successfully |
+| Valid action rate | > 99.5% | High accuracy |
+| Context length | ≤ 10k tokens | Managed properly |
+| Continuous runtime | ≥ 48 hours without crashes | Stable operation |
+| State detection accuracy | > 95% | Working with memory mapping |
 
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**Emulator crashes on startup**
-- Ensure you have a valid Pokémon Blue ROM
-- Verify ROM checksum matches known good values
-- Check that all dependencies are installed
-
-**Agent gets stuck in game**
-- Increase debug logging to identify state detection issues
-- Check memory map for correct address values
-- Verify pathfinding algorithms for the current map
-
-**API connection errors**
-- Verify your Mistral API key is correct
-- Check network connectivity
-- Ensure you haven't hit rate limits
-
-**Button input not working**
-- Check that PyBoy is properly installed (`pip install pyboy`)
-- Verify that the emulator can send inputs to the game
-- Ensure the game window has focus for non-headless mode
-
-## 🛠️ Development
+## 🔧 Development & Testing
 
 ### Code Standards
 - Follow PEP 8 style guide
@@ -181,9 +157,11 @@ Handles communication with Mistral language model:
 emulator/         # Emulator interface and game loop
 memory_map/       # RAM addresses and helpers
 state_detector/   # Game state detection
-prompt_manager/   # Context management
-agent_core/       # Main agent logic
-tools/            # Pathfinding, battles, puzzles
+prompt_manager/   # Context management and prompt building
+agent_core/       # Main agent logic and Mistral API integration
+tools/            # Pathfinding, battle helpers, puzzle solvers
+database/         # Logging and data storage
+dashboard/        # Monitoring interface
 tests/            # Unit and integration tests
 ```
 
@@ -207,6 +185,42 @@ pytest tests/test_battle_helper.py
 4. Ensure all tests pass
 5. Update documentation as needed
 
+### Development Guidelines
+- Maintain backward compatibility where possible
+- Write comprehensive unit tests for new features
+- Document all public APIs and interfaces
+- Follow established code patterns and conventions
+- Keep dependencies minimal and well-justified
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Troubleshooting
+
+### Common Issues
+
+**Emulator crashes on startup**
+- Ensure you have a valid Pokémon Blue ROM
+- Verify ROM checksum matches known good values
+- Check that all dependencies are installed
+
+**Agent gets stuck in game**
+- Increase debug logging to identify state detection issues
+- Check memory map for correct address values
+- Verify pathfinding algorithms for the current map
+
+**API connection errors**
+- Verify your Mistral API key is correct
+- Check network connectivity
+- Ensure you haven't hit rate limits
+
+**Button input not working**
+- Check that PyBoy is properly installed (`pip install pyboy`)
+- Verify that the emulator can send inputs to the game
+- Ensure the game window has focus for non-headless mode
+
+**Screenshot capture fails**
+- Check that the screenshots directory is writable
+- Verify that PyBoy can capture screen buffer
+- Ensure sufficient disk space is available
