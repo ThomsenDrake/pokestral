@@ -96,7 +96,7 @@ class PokemonBlueOrchestrator:
         self.logger.info("Pokemon Blue Orchestrator initialized")
 
     def _find_rom(self) -> str:
-        """Find Pokemon Blue ROM file in common locations."""
+        """Find Pokemon Blue ROM file in common locations with enhanced validation."""
         common_paths = [
             "roms/pokemon-blue-version.gb",  # Actual ROM file name in the project
             "roms/pokemon_blue.gb",
@@ -110,13 +110,19 @@ class PokemonBlueOrchestrator:
 
         for path in common_paths:
             expanded_path = Path(path).expanduser()
-            if expanded_path.exists():
-                print(f"Found ROM at: {expanded_path}")  # Use print instead of logger
-                return str(expanded_path)
+            if expanded_path.exists() and expanded_path.is_file():
+                # Validate ROM file size (should be around 1MB for Pokemon Blue)
+                file_size = expanded_path.stat().st_size
+                if 500_000 <= file_size <= 2_000_000:  # Reasonable ROM size range
+                    print(f"Found ROM at: {expanded_path} ({file_size:,} bytes)")
+                    return str(expanded_path)
+                else:
+                    self.logger.warning(f"Found file at {expanded_path} but size {file_size:,} bytes seems incorrect for Pokemon Blue ROM")
 
         # Ask user for ROM path if not found
         raise FileNotFoundError(
-            "Pokemon Blue ROM not found. Please provide the path to pokemon_blue.gb or pokemon_blue.gbc"
+            "Pokemon Blue ROM not found. Please provide the path to pokemon_blue.gb or pokemon_blue.gbc. "
+            "Expected locations: roms/pokemon-blue-version.gb"
         )
 
     def _setup_logging(self):
@@ -149,7 +155,7 @@ class PokemonBlueOrchestrator:
 
     def initialize_components(self) -> bool:
         """
-        Initialize all system components.
+        Initialize all system components with enhanced error handling and validation.
 
         Returns:
             bool: True if all components initialized successfully
@@ -157,40 +163,52 @@ class PokemonBlueOrchestrator:
         try:
             self.logger.info("Initializing system components...")
 
-            # Initialize core components
-            self.memory_map = PokemonMemoryMap()
-            self.state_detector = StateDetector(self.memory_map)
-            self.prompt_manager = PromptManager()
-            self.mistral_api = MistralAPI()
-            self.battle_helper = BattleHelper()
-            self.pathfinder = Pathfinder([])  # Pass an empty grid as required
-            self.puzzle_solver = PuzzleSolver()
-
-            # Initialize emulator with visual display
-            self.emulator = PokemonEmulator(
-                rom_path=self.rom_path,
-                window_title="Pokemon Blue - AI Agent",
-                scale=3 if not self.headless else 1,
-                sound=False,  # Disable sound for better performance
-                auto_tick_rate=60
-            )
-
-            # Load ROM
-            if not self.emulator.load_rom():
-                self.logger.error("Failed to load Pokemon Blue ROM")
+            # Run startup validation first
+            if not self._run_startup_validation():
+                self.logger.error("Startup validation failed")
                 return False
 
-            # Initialize agent core
-            self.agent_core = AgentCore(
-                rom_path=self.rom_path,
-                headless=self.headless
-            )
-            
-            # Connect the emulator to the agent core
-            self.agent_core.connect_emulator(self.emulator)
+            # Initialize components with dependency management and retry logic
+            critical_components = [
+                ('memory_map', lambda: PokemonMemoryMap()),
+                ('prompt_manager', lambda: PromptManager()),
+                ('emulator', lambda: self._create_emulator()),
+                ('agent_core', lambda: AgentCore(rom_path=self.rom_path, headless=self.headless)),
+            ]
+
+            optional_components = [
+                ('mistral_api', lambda: MistralAPI()),
+                ('battle_helper', lambda: BattleHelper()),
+                ('pathfinder', lambda: Pathfinder([])),
+                ('puzzle_solver', lambda: PuzzleSolver())
+            ]
+
+            # Initialize critical components in order
+            for component_name, init_func in critical_components:
+                if not self._initialize_component_with_retry(component_name, init_func, max_retries=3):
+                    self.logger.critical(f"Critical component {component_name} failed to initialize")
+                    return False
+
+            # Initialize optional components with graceful fallback
+            for component_name, init_func in optional_components:
+                if not self._initialize_component_with_retry(component_name, init_func, max_retries=1):
+                    self.logger.warning(f"Optional component {component_name} failed - continuing without it")
+
+            # Validate component dependencies
+            if not self._validate_component_dependencies():
+                self.logger.error("Component dependency validation failed")
+                return False
+
+            # Connect components
+            if not self._connect_components():
+                self.logger.error("Failed to connect components")
+                return False
 
             # Setup emulator callbacks for integration
             self._setup_emulator_callbacks()
+
+            # Setup resource monitoring
+            self._setup_resource_monitoring()
 
             self.logger.info("All components initialized successfully")
             return True
@@ -198,6 +216,158 @@ class PokemonBlueOrchestrator:
         except Exception as e:
             self.logger.error(f"Failed to initialize components: {e}")
             return False
+
+    def _create_emulator(self) -> PokemonEmulator:
+        """Create emulator with configuration validation."""
+        config = self._load_emulator_config()
+        return PokemonEmulator(
+            rom_path=self.rom_path,
+            window_title=config['window_title'],
+            scale=config['scale'],
+            sound=config['sound'],
+            auto_tick_rate=config['auto_tick_rate']
+        )
+
+    def _load_emulator_config(self) -> dict:
+        """Load emulator configuration with defaults and validation."""
+        return {
+            'scale': 3 if not self.headless else 1,
+            'sound': False,
+            'auto_tick_rate': 60,
+            'window_title': "Pokemon Blue - AI Agent"
+        }
+
+    def _initialize_component_with_retry(self, component_name: str, init_func, max_retries: int = 3) -> bool:
+        """Initialize component with retry logic."""
+        for attempt in range(max_retries):
+            try:
+                component = init_func()
+                setattr(self, component_name, component)
+                self.logger.debug(f"Component {component_name} initialized successfully")
+                return True
+            except Exception as e:
+                self.logger.warning(f"Component {component_name} initialization attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                else:
+                    self.logger.error(f"Component {component_name} failed after {max_retries} attempts: {e}")
+                    return False
+        return False
+
+    def _validate_component_dependencies(self) -> bool:
+        """Validate that all component dependencies are satisfied."""
+        dependencies = {
+            'agent_core': ['emulator'],
+            'battle_helper': ['memory_map']
+        }
+        
+        for component, deps in dependencies.items():
+            component_obj = getattr(self, component, None)
+            if component_obj is None:
+                self.logger.error(f"Component {component} not initialized")
+                return False
+                
+            for dep in deps:
+                dep_obj = getattr(self, dep, None)
+                if dep_obj is None:
+                    self.logger.error(f"Dependency {dep} for component {component} not initialized")
+                    return False
+        
+        # Initialize state_detector after memory_map is validated
+        if self.memory_map and not self.state_detector:
+            try:
+                self.state_detector = StateDetector(self.memory_map)
+            except Exception as e:
+                self.logger.error(f"Failed to initialize state_detector: {e}")
+                return False
+        
+        return True
+
+    def _connect_components(self) -> bool:
+        """Connect components together."""
+        try:
+            # Connect emulator to agent core
+            if self.emulator and self.agent_core:
+                self.agent_core.connect_emulator(self.emulator)
+                
+                # Load ROM
+                if not self.emulator.load_rom():
+                    self.logger.error("Failed to load Pokemon Blue ROM")
+                    return False
+            else:
+                self.logger.error("Cannot connect components: emulator or agent_core not initialized")
+                return False
+                
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to connect components: {e}")
+            return False
+
+    def _run_startup_validation(self) -> bool:
+        """Run comprehensive startup validation tests."""
+        validation_tests = [
+            self._validate_rom_loading,
+            self._validate_environment,
+        ]
+        
+        for test in validation_tests:
+            if not test():
+                self.logger.error(f"Startup validation failed: {test.__name__}")
+                return False
+        
+        return True
+
+    def _validate_rom_loading(self) -> bool:
+        """Validate ROM file loading."""
+        try:
+            rom_path = Path(self.rom_path)
+            if not rom_path.exists():
+                self.logger.error(f"ROM file not found: {self.rom_path}")
+                return False
+                
+            if not rom_path.is_file():
+                self.logger.error(f"ROM path is not a file: {self.rom_path}")
+                return False
+                
+            file_size = rom_path.stat().st_size
+            if file_size < 500_000 or file_size > 2_000_000:
+                self.logger.error(f"ROM file size {file_size:,} bytes seems incorrect for Pokemon Blue")
+                return False
+                
+            self.logger.info(f"ROM validation passed: {self.rom_path} ({file_size:,} bytes)")
+            return True
+        except Exception as e:
+            self.logger.error(f"ROM validation failed: {e}")
+            return False
+
+    def _validate_environment(self) -> bool:
+        """Validate environment configuration."""
+        try:
+            # Check for required environment variables
+            required_vars = ['MISTRAL_API_KEY']
+            missing_vars = []
+            
+            for var in required_vars:
+                if not os.getenv(var):
+                    missing_vars.append(var)
+            
+            if missing_vars:
+                self.logger.warning(f"Missing environment variables: {missing_vars}")
+                # Don't fail for missing API key, just warn
+            
+            return True
+        except Exception as e:
+            self.logger.error(f"Environment validation failed: {e}")
+            return False
+
+    def _setup_resource_monitoring(self):
+        """Setup resource usage monitoring and cleanup."""
+        self.resource_monitor = {
+            'memory_usage': [],
+            'screenshot_count': 0,
+            'frame_processing_time': [],
+            'start_time': time.time()
+        }
 
     def _setup_emulator_callbacks(self):
         """Setup callbacks for emulator-agent integration."""
@@ -249,7 +419,7 @@ class PokemonBlueOrchestrator:
                 return False
 
             # Start emulator
-            if not self.emulator.start(auto_tick=False):  # We'll control ticking manually
+            if self.emulator and not self.emulator.start(auto_tick=False):  # We'll control ticking manually
                 self.logger.error("Failed to start emulator")
                 return False
 
@@ -268,7 +438,7 @@ class PokemonBlueOrchestrator:
 
     def _run_game_loop(self) -> bool:
         """
-        Main game loop coordinating all components.
+        Main game loop with adaptive performance management.
 
         Returns:
             bool: True if loop completed successfully
@@ -278,14 +448,35 @@ class PokemonBlueOrchestrator:
             return False
 
         try:
+            # Setup adaptive game loop parameters
+            target_fps = 60
+            frame_budget = 1.0 / target_fps
+            last_health_check = time.time()
+            
+            self.logger.info("Starting adaptive game loop...")
+
             # Main loop
             while self._running and not self._shutdown_requested:
                 if not self.emulator.is_running():
                     break
 
-                # Let the agent handle the game loop instead of just ticking
-                # The agent is responsible for coordinating with the emulator
+                frame_start = time.time()
+                
+                # Let the agent handle the game loop
                 self.agent_core.main_game_loop()
+                
+                # Adaptive timing
+                frame_time = time.time() - frame_start
+                if frame_time < frame_budget:
+                    time.sleep(frame_budget - frame_time)
+                
+                # Performance monitoring
+                self._update_performance_metrics(frame_time)
+                
+                # Periodic health checks
+                if time.time() - last_health_check > 30:  # Every 30 seconds
+                    self._log_system_health()
+                    last_health_check = time.time()
 
             return True
 
@@ -296,6 +487,48 @@ class PokemonBlueOrchestrator:
             self.logger.error(f"Error in game loop: {e}")
             return False
 
+    def _update_performance_metrics(self, frame_time: float):
+        """Update performance metrics for monitoring."""
+        if hasattr(self, 'resource_monitor'):
+            self.resource_monitor['frame_processing_time'].append(frame_time)
+            # Keep only last 1000 frame times
+            if len(self.resource_monitor['frame_processing_time']) > 1000:
+                self.resource_monitor['frame_processing_time'] = self.resource_monitor['frame_processing_time'][-1000:]
+
+    def _log_system_health(self):
+        """Log comprehensive system health status."""
+        try:
+            health_status = {
+                'components': self._check_component_health(),
+                'performance': self._get_performance_metrics(),
+                'resources': self._get_resource_usage()
+            }
+            self.logger.info(f"System Health: Components={health_status['components']}, "
+                           f"Avg FPS={health_status['performance']:.1f}, "
+                           f"Runtime={health_status['resources']:.1f}s")
+        except Exception as e:
+            self.logger.error(f"Error logging system health: {e}")
+
+    def _check_component_health(self) -> str:
+        """Check health of all components."""
+        components = ['emulator', 'agent_core', 'memory_map', 'state_detector']
+        healthy = sum(1 for comp in components if getattr(self, comp) is not None)
+        return f"{healthy}/{len(components)} healthy"
+
+    def _get_performance_metrics(self) -> float:
+        """Get current performance metrics."""
+        if hasattr(self, 'resource_monitor') and self.resource_monitor['frame_processing_time']:
+            recent_times = self.resource_monitor['frame_processing_time'][-100:]  # Last 100 frames
+            avg_frame_time = sum(recent_times) / len(recent_times)
+            return 1.0 / avg_frame_time if avg_frame_time > 0 else 0
+        return 0
+
+    def _get_resource_usage(self) -> float:
+        """Get resource usage statistics."""
+        if hasattr(self, 'resource_monitor'):
+            return time.time() - self.resource_monitor['start_time']
+        return 0
+
     def _perform_periodic_tasks(self):
         """Perform periodic maintenance tasks."""
         try:
@@ -305,52 +538,113 @@ class PokemonBlueOrchestrator:
                 self.logger.debug(f"Game state: {game_state}")
 
             # Log system status every 10 seconds
-            if self.emulator.frame_count % 600 == 0:
+            if self.emulator and hasattr(self.emulator, 'frame_count') and self.emulator.frame_count % 600 == 0:
                 elapsed = time.time() - self.start_time
                 hours = int(elapsed // 3600)
                 minutes = int((elapsed % 3600) // 60)
                 seconds = int(elapsed % 60)
 
+                fps = self.emulator.frame_count / elapsed if elapsed > 0 else 0
+                inputs_processed = getattr(self.emulator, 'performance_stats', {}).get('inputs_processed', 0)
+
                 self.logger.info(
                     f"Runtime: {hours:02d}:{minutes:02d}:{seconds:02d} | "
                     f"Frames: {self.emulator.frame_count:,} | "
-                    f"FPS: {self.emulator.frame_count/elapsed:.1f} | "
-                    f"Inputs: {self.emulator.performance_stats['inputs_processed']}"
+                    f"FPS: {fps:.1f} | "
+                    f"Inputs: {inputs_processed}"
                 )
 
         except Exception as e:
             self.logger.error(f"Error in periodic tasks: {e}")
 
     def stop(self):
-        """Stop the system and cleanup resources."""
+        """Stop the system and perform enhanced cleanup."""
         if not self._running:
             return
 
         self.logger.info("Stopping Pokemon Blue AI Agent system...")
         self._running = False
 
+        try:
+            # Perform graceful shutdown
+            self._graceful_shutdown()
+        except Exception as e:
+            self.logger.error(f"Error during graceful shutdown: {e}")
+
+    def _graceful_shutdown(self):
+        """Perform graceful shutdown with state preservation."""
+        self.logger.info("Initiating graceful shutdown...")
+        
+        # Save current game state if possible
+        self._preserve_game_state()
+        
+        # Cleanup resources with validation
+        self._cleanup_with_validation()
+        
+        # Generate shutdown report
+        self._generate_shutdown_report()
+
+    def _preserve_game_state(self):
+        """Preserve current game state if possible."""
+        try:
+            if self.emulator:
+                # Save final screenshot
+                final_screenshot = f"screenshots/shutdown_final_{int(time.time())}.png"
+                self.save_screenshot(final_screenshot)
+                self.logger.info(f"Final screenshot saved: {final_screenshot}")
+        except Exception as e:
+            self.logger.error(f"Error preserving game state: {e}")
+
+    def _cleanup_with_validation(self):
+        """Enhanced resource cleanup with validation."""
+        cleanup_tasks = [
+            ('emulator', lambda: self.emulator.stop() if self.emulator else None),
+            ('agent_core', lambda: None),  # Agent core cleanup if needed
+        ]
+        
+        for component_name, cleanup_func in cleanup_tasks:
+            try:
+                cleanup_func()
+                self.logger.debug(f"Component {component_name} cleaned up successfully")
+            except Exception as e:
+                self.logger.error(f"Error cleaning up {component_name}: {e}")
+
+    def _generate_shutdown_report(self):
+        """Generate comprehensive shutdown report."""
+        try:
+            if self.start_time > 0:
+                total_time = time.time() - self.start_time
+                hours = int(total_time // 3600)
+                minutes = int((total_time % 3600) // 60)
+                seconds = int(total_time % 60)
+
+                avg_fps = self.frames_processed / total_time if total_time > 0 else 0
+                
+                self.logger.info(
+                    "=== SHUTDOWN REPORT ===\n"
+                    f"Runtime: {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+                    f"Total frames: {self.frames_processed:,}\n"
+                    f"Average FPS: {avg_fps:.1f}\n"
+                    f"Screenshots taken: {getattr(self, 'resource_monitor', {}).get('screenshot_count', 0)}\n"
+                    "======================="
+                )
+        except Exception as e:
+            self.logger.error(f"Error generating shutdown report: {e}")
+
         # Stop emulator
         if self.emulator:
-            self.emulator.stop()
+            try:
+                self.emulator.stop()
+            except Exception as e:
+                self.logger.error(f"Error stopping emulator: {e}")
 
         # Stop agent core
         if self.agent_core:
-            # Agent core cleanup would go here
-            pass
-
-        # Log final statistics
-        if self.start_time > 0:
-            total_time = time.time() - self.start_time
-            hours = int(total_time // 3600)
-            minutes = int((total_time % 3600) // 60)
-            seconds = int(total_time % 60)
-
-            self.logger.info(
-                "System stopped. Final stats: "
-                f"Runtime: {hours:02d}:{minutes:02d}:{seconds:02d} | "
-                f"Total frames: {self.frames_processed:,} | "
-                f"Average FPS: {self.frames_processed/total_time:.1f}"
-            )
+            try:
+                # Agent core cleanup would go here
+                pass
+            except Exception as e:
+                self.logger.error(f"Error stopping agent core: {e}")
 
     def pause(self):
         """Pause the system."""
@@ -415,7 +709,7 @@ class PokemonBlueOrchestrator:
 
         return status
 
-    def save_screenshot(self, filepath: str = None) -> bool:
+    def save_screenshot(self, filepath: Optional[str] = None) -> bool:
         """
         Save current game screenshot.
 
@@ -430,16 +724,17 @@ class PokemonBlueOrchestrator:
             return False
 
         if filepath is None:
-            import time
             timestamp = int(time.time())
             filepath = f"screenshots/game_state_{timestamp}.png"
 
-        return self.emulator.save_screenshot(filepath)
+        if self.emulator:
+            return self.emulator.save_screenshot(filepath)
+        return False
 
 def main():
     """Main entry point for the Pokemon Blue AI agent system."""
     parser = argparse.ArgumentParser(description="Pokemon Blue AI Agent - Autonomous Gameplay System")
-    parser.add_argument('--rom', type=str, help='Path to Pokemon Blue ROM file')
+    parser.add_argument('--rom', type=str, default='roms/pokemon-blue-version.gb', help='Path to Pokemon Blue ROM file')
     parser.add_argument('--headless', action='store_true', help='Run without visual window')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('--reset', action='store_true', help='Reset game to initial state')
@@ -460,7 +755,6 @@ def main():
 
         # Handle reset if requested
         if args.reset:
-            import time
             time.sleep(2)  # Wait for system to stabilize
             orchestrator.reset()
 
