@@ -148,8 +148,9 @@ class MemoryMapIntegrationValidator:
 
             # Test coordinate validation
             if 0 <= player_x <= 255 and 0 <= player_y <= 255:
-                print("[DEBUG] ✓ Valid memory coordinates"            else:
-                print("[DEBUG] ❌ Invalid memory coordinates"
+                print("[DEBUG] ✓ Valid memory coordinates")
+            else:
+                print("[DEBUG] ❌ Invalid memory coordinates")
     def validate_error_handling(self):
         """Test 5: Validate error handling for memory access issues."""
         print("[DEBUG] Testing error handling...")

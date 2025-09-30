@@ -8,6 +8,7 @@ import math
 import logging
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
+from memory_map.pokemon_memory_map import PokemonMemoryMap, TYPE_NAMES
 
 
 class TypeEffectiveness(Enum):
@@ -610,62 +611,209 @@ def get_type_effectiveness(attack_type: str, defense_type: str) -> float:
 
 def calculate_damage(attacker: dict, defender: dict, move: dict) -> int:
     """Calculate damage using dictionary inputs."""
-    # Convert dict inputs to Pokemon/Move objects
-    attacker_moves = [Move(m['name'], PokemonType(m['type']), m['category'],
-                          m['power'], m['pp']) for m in attacker.get('moves', [])]
+    # Input validation
+    if not isinstance(attacker, dict) or not isinstance(defender, dict) or not isinstance(move, dict):
+        return 0
+        
+    # Validate required fields
+    required_fields = ['species', 'level', 'types', 'hp', 'attack', 'defense', 'special', 'speed']
+    for field in required_fields:
+        if field not in attacker or field not in defender:
+            return 0
+            
+    if 'name' not in move or 'type' not in move or 'category' not in move:
+        return 0
+        
+    try:
+        # Convert dict inputs to Pokemon/Move objects
+        attacker_moves = []
+        for m in attacker.get('moves', []):
+            if isinstance(m, dict) and all(k in m for k in ['name', 'type', 'category', 'power', 'pp']):
+                try:
+                    attacker_moves.append(Move(m['name'], PokemonType(m['type']), m['category'],
+                                              m['power'], m['pp']))
+                except (ValueError, TypeError):
+                    continue
 
-    defender_moves = [Move(m['name'], PokemonType(m['type']), m['category'],
-                          m['power'], m['pp']) for m in defender.get('moves', [])]
+        defender_moves = []
+        for m in defender.get('moves', []):
+            if isinstance(m, dict) and all(k in m for k in ['name', 'type', 'category', 'power', 'pp']):
+                try:
+                    defender_moves.append(Move(m['name'], PokemonType(m['type']), m['category'],
+                                              m['power'], m['pp']))
+                except (ValueError, TypeError):
+                    continue
 
-    attacker_pokemon = Pokemon(
-        attacker['species'], attacker['level'],
-        [PokemonType(t) for t in attacker['types']],
-        attacker['hp'], attacker['attack'], attacker['defense'],
-        attacker['special'], attacker['speed'], attacker_moves
-    )
+        # Convert types with error handling
+        try:
+            attacker_types = [PokemonType(t) for t in attacker['types']]
+        except (ValueError, TypeError):
+            attacker_types = [PokemonType.NORMAL]
+            
+        try:
+            defender_types = [PokemonType(t) for t in defender['types']]
+        except (ValueError, TypeError):
+            defender_types = [PokemonType.NORMAL]
 
-    defender_pokemon = Pokemon(
-        defender['species'], defender['level'],
-        [PokemonType(t) for t in defender['types']],
-        defender['hp'], attacker['attack'], attacker['defense'],
-        attacker['special'], attacker['speed'], defender_moves
-    )
+        attacker_pokemon = Pokemon(
+            attacker['species'], attacker['level'], attacker_types,
+            attacker['hp'], attacker['attack'], attacker['defense'],
+            attacker['special'], attacker['speed'], attacker_moves
+        )
 
-    move_obj = Move(move['name'], PokemonType(move['type']), move['category'],
-                   move['power'], move['pp'])
+        defender_pokemon = Pokemon(
+            defender['species'], defender['level'], defender_types,
+            defender['hp'], defender['attack'], defender['defense'],
+            defender['special'], defender['speed'], defender_moves
+        )
 
-    return _battle_helper.calculate_damage(attacker_pokemon, defender_pokemon, move_obj)
+        try:
+            move_obj = Move(move['name'], PokemonType(move['type']), move['category'],
+                           move.get('power', 0), move.get('pp', 0))
+        except (ValueError, TypeError):
+            return 0
+
+        return _battle_helper.calculate_damage(attacker_pokemon, defender_pokemon, move_obj)
+    except Exception:
+        return 0
 
 def suggest_move(attacker: dict, defender: dict, available_moves: list = None) -> dict:
     """Suggest best move using dictionary inputs."""
-    # Convert dict inputs to Pokemon/Move objects
-    attacker_moves = [Move(m['name'], PokemonType(m['type']), m['category'],
-                          m['power'], m['pp']) for m in attacker.get('moves', [])]
+    # Input validation
+    if not isinstance(attacker, dict) or not isinstance(defender, dict):
+        return {"move": None, "reason": "Invalid input types", "damage": 0, "effectiveness": 1.0}
+        
+    # Validate required fields
+    required_fields = ['species', 'level', 'types', 'hp', 'attack', 'defense', 'special', 'speed']
+    for field in required_fields:
+        if field not in attacker or field not in defender:
+            return {"move": None, "reason": f"Missing required field: {field}", "damage": 0, "effectiveness": 1.0}
+    
+    try:
+        # Convert dict inputs to Pokemon/Move objects
+        attacker_moves = []
+        for m in attacker.get('moves', []):
+            if isinstance(m, dict) and all(k in m for k in ['name', 'type', 'category', 'power', 'pp']):
+                try:
+                    attacker_moves.append(Move(m['name'], PokemonType(m['type']), m['category'],
+                                              m['power'], m['pp']))
+                except (ValueError, TypeError):
+                    continue
 
-    defender_moves = [Move(m['name'], PokemonType(m['type']), m['category'],
-                          m['power'], m['pp']) for m in defender.get('moves', [])]
+        defender_moves = []
+        for m in defender.get('moves', []):
+            if isinstance(m, dict) and all(k in m for k in ['name', 'type', 'category', 'power', 'pp']):
+                try:
+                    defender_moves.append(Move(m['name'], PokemonType(m['type']), m['category'],
+                                              m['power'], m['pp']))
+                except (ValueError, TypeError):
+                    continue
 
-    attacker_pokemon = Pokemon(
-        attacker['species'], attacker['level'],
-        [PokemonType(t) for t in attacker['types']],
-        attacker['hp'], attacker['attack'], attacker['defense'],
-        attacker['special'], attacker['speed'], attacker_moves
-    )
+        # Convert types with error handling
+        try:
+            attacker_types = [PokemonType(t) for t in attacker['types']]
+        except (ValueError, TypeError):
+            attacker_types = [PokemonType.NORMAL]
+            
+        try:
+            defender_types = [PokemonType(t) for t in defender['types']]
+        except (ValueError, TypeError):
+            defender_types = [PokemonType.NORMAL]
 
-    defender_pokemon = Pokemon(
-        defender['species'], defender['level'],
-        [PokemonType(t) for t in defender['types']],
-        defender['hp'], attacker['attack'], attacker['defense'],
-        attacker['special'], attacker['speed'], defender_moves
-    )
+        attacker_pokemon = Pokemon(
+            attacker['species'], attacker['level'], attacker_types,
+            attacker['hp'], attacker['attack'], attacker['defense'],
+            attacker['special'], attacker['speed'], attacker_moves
+        )
 
-    if available_moves:
-        available_move_objects = [Move(m['name'], PokemonType(m['type']), m['category'],
-                                     m['power'], m['pp']) for m in available_moves]
-    else:
+        defender_pokemon = Pokemon(
+            defender['species'], defender['level'], defender_types,
+            defender['hp'], defender['attack'], defender['defense'],
+            defender['special'], defender['speed'], defender_moves
+        )
+
         available_move_objects = None
+        if available_moves and isinstance(available_moves, list):
+            available_move_objects = []
+            for m in available_moves:
+                if isinstance(m, dict) and all(k in m for k in ['name', 'type', 'category', 'power', 'pp']):
+                    try:
+                        available_move_objects.append(Move(m['name'], PokemonType(m['type']), m['category'],
+                                                         m['power'], m['pp']))
+                    except (ValueError, TypeError):
+                        continue
 
-    return _battle_helper.suggest_move(attacker_pokemon, defender_pokemon, available_move_objects)
+        return _battle_helper.suggest_move(attacker_pokemon, defender_pokemon, available_move_objects)
+    except Exception as e:
+        return {"move": None, "reason": f"Error processing move suggestion: {str(e)}", "damage": 0, "effectiveness": 1.0}
+
+
+# Helper functions for battle integration
+def get_battle_pokemon_data(memory, is_player=True):
+    """Get battle Pokemon data from memory."""
+    memory_map = PokemonMemoryMap()
+    return memory_map.get_battle_pokemon_data(memory, is_player)
+
+
+def get_player_party_info(memory):
+    """Get player's party Pokemon information."""
+    memory_map = PokemonMemoryMap()
+    try:
+        num_pokemon = memory_map.get_num_party_pokemon(memory)
+        party_info = []
+        
+        for i in range(num_pokemon):
+            species = memory_map.read_byte(memory, 0xD164 + i)
+            level = memory_map.read_byte(memory, 0xD18C + i)
+            hp_start = 0xD16B + (i * 2)
+            hp = memory_map.read_byte(memory, hp_start) + (memory_map.read_byte(memory, hp_start + 1) << 8)
+            max_hp_start = 0xD16D + (i * 2)
+            max_hp = memory_map.read_byte(memory, max_hp_start) + (memory_map.read_byte(memory, max_hp_start + 1) << 8)
+            
+            # Get moves for this Pokemon
+            moves = []
+            for j in range(4):
+                move_addr = 0xD172 + (i * 8) + (j * 2)
+                move_id = memory_map.read_byte(memory, move_addr) + (memory_map.read_byte(memory, move_addr + 1) << 8)
+                if move_id > 0:
+                    move_data = memory_map.get_move_data(memory, move_id)
+                    if move_data:
+                        moves.append(move_data)
+            
+            party_info.append({
+                'species': species,
+                'level': level,
+                'hp': hp,
+                'max_hp': max_hp,
+                'moves': moves
+            })
+        
+        return party_info
+    except Exception:
+        return []
+
+
+def get_player_items(memory):
+    """Get player's item information."""
+    memory_map = PokemonMemoryMap()
+    try:
+        items_count = memory_map.read_byte(memory, 0xD31C)
+        items = []
+        
+        for i in range(min(items_count, 20)):  # Max 20 items
+            item_addr = 0xD31D + (i * 2)
+            item_id = memory_map.read_byte(memory, item_addr)
+            quantity = memory_map.read_byte(memory, item_addr + 1)
+            
+            if item_id > 0 and quantity > 0:
+                items.append({
+                    'id': item_id,
+                    'quantity': quantity
+                })
+        
+        return items
+    except Exception:
+        return []
 
 
 class PyBoyBattleIntegration:
@@ -682,19 +830,46 @@ class PyBoyBattleIntegration:
         self.battle_helper = BattleHelper()
         self.logger = logging.getLogger(__name__)
 
+    def get_memory(self):
+        """
+        Unified memory access method that handles different PyBoy API versions.
+        
+        Returns:
+            Memory object or None if access fails
+        """
+        if not self.pyboy:
+            return None
+            
+        try:
+            # Try the newer PyBoy API first
+            memory = self.pyboy.memory
+            return memory
+        except (AttributeError, TypeError):
+            try:
+                # Fallback to older API
+                memory = self.pyboy.get_memory()
+                return memory
+            except (AttributeError, TypeError):
+                # For latest PyBoy versions, try alternative access
+                try:
+                    if hasattr(self.pyboy, '_memory'):
+                        return self.pyboy._memory
+                    elif hasattr(self.pyboy, 'mbc'):
+                        return self.pyboy.mbc
+                except:
+                    pass
+                self.logger.warning("Could not access PyBoy memory - API compatibility issue")
+                return None
+
     def is_in_battle(self) -> bool:
         """Check if currently in battle."""
         try:
-            # Try newer PyBoy API first
-            memory = self.pyboy.memory
-            return memory[0xD057] == 0x01
-        except (AttributeError, TypeError):
-            # Fallback to older API if needed
-            try:
-                memory = self.pyboy.get_memory()
+            memory = self.get_memory()
+            if memory:
                 return memory[0xD057] == 0x01
-            except:
-                return False
+        except Exception:
+            pass
+        return False
 
     def get_current_battle_state(self) -> Dict[str, Any]:
         """
@@ -707,7 +882,9 @@ class PyBoyBattleIntegration:
             return {"error": "Not in battle"}
 
         try:
-            memory = self.pyboy.get_memory()
+            memory = self.get_memory()
+            if not memory:
+                return {"error": "Could not access memory"}
 
             # Get player Pokemon data
             player_data = get_battle_pokemon_data(memory, is_player=True)

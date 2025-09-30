@@ -26,23 +26,33 @@ class PokemonMemoryMap:
         pass
     
     def read_byte(self, memory, address):
-        """Read a single byte from memory."""
-        # Handle PyBoy API differences
+        """
+        Read a single byte from memory with simplified error handling.
+        
+        Args:
+            memory: Memory object (list, array, or similar)
+            address: Memory address to read
+            
+        Returns:
+            int: Byte value at address, or 0 if access fails
+        """
+        if memory is None:
+            return 0
+            
         try:
-            # For newer PyBoy versions, memory might need to be accessed differently
-            if isinstance(memory, (list, tuple)):
-                return memory[address]
-            elif hasattr(memory, '__getitem__'):
-                return memory[address]
-            else:
-                # If memory is a mapping-like object
-                return getattr(memory, 'get', lambda x: memory[x])(address)
+            # Direct access for list/array-like objects
+            return memory[address]
         except (TypeError, IndexError, KeyError):
-            # Fallback if direct access fails
-            if hasattr(memory, '__getitem__'):
-                return memory[address]
-            else:
-                return 0  # Default value if access fails
+            # Try alternative access methods
+            try:
+                if hasattr(memory, 'get'):
+                    return memory.get(address, 0)
+                elif hasattr(memory, '__getitem__'):
+                    return memory.__getitem__(address)
+                else:
+                    return 0
+            except Exception:
+                return 0
     
     def get_num_party_pokemon(self, memory):
         """Get the number of Pokémon in the player's party."""
@@ -449,6 +459,74 @@ TYPE_NAMES = {
     0x19: "Ice",
     0x1A: "Dragon"
 }
+
+
+# Convenience functions for battle_helper.py
+def get_battle_pokemon_data(memory, is_player=True):
+    """Convenience function to get battle Pokemon data."""
+    memory_map = PokemonMemoryMap()
+    return memory_map.get_battle_pokemon_data(memory, is_player)
+
+
+def get_player_party_info(memory):
+    """Get player's party Pokemon information."""
+    memory_map = PokemonMemoryMap()
+    try:
+        num_pokemon = memory_map.get_num_party_pokemon(memory)
+        party_info = []
+        
+        for i in range(num_pokemon):
+            species = memory_map.read_byte(memory, 0xD164 + i)
+            level = memory_map.read_byte(memory, 0xD18C + i)
+            hp_start = 0xD16B + (i * 2)
+            hp = memory_map.read_byte(memory, hp_start) + (memory_map.read_byte(memory, hp_start + 1) << 8)
+            max_hp_start = 0xD16D + (i * 2)
+            max_hp = memory_map.read_byte(memory, max_hp_start) + (memory_map.read_byte(memory, max_hp_start + 1) << 8)
+            
+            # Get moves for this Pokemon
+            moves = []
+            for j in range(4):
+                move_addr = 0xD172 + (i * 8) + (j * 2)
+                move_id = memory_map.read_byte(memory, move_addr) + (memory_map.read_byte(memory, move_addr + 1) << 8)
+                if move_id > 0:
+                    move_data = memory_map.get_move_data(memory, move_id)
+                    if move_data:
+                        moves.append(move_data)
+            
+            party_info.append({
+                'species': species,
+                'level': level,
+                'hp': hp,
+                'max_hp': max_hp,
+                'moves': moves
+            })
+        
+        return party_info
+    except Exception:
+        return []
+
+
+def get_player_items(memory):
+    """Get player's item information."""
+    memory_map = PokemonMemoryMap()
+    try:
+        items_count = memory_map.read_byte(memory, 0xD31C)
+        items = []
+        
+        for i in range(min(items_count, 20)):  # Max 20 items
+            item_addr = 0xD31D + (i * 2)
+            item_id = memory_map.read_byte(memory, item_addr)
+            quantity = memory_map.read_byte(memory, item_addr + 1)
+            
+            if item_id > 0 and quantity > 0:
+                items.append({
+                    'id': item_id,
+                    'quantity': quantity
+                })
+        
+        return items
+    except Exception:
+        return []
 
 
 # End of PokemonMemoryMap class

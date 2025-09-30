@@ -50,6 +50,37 @@ class AgentCore:
         )
         self.logger = logging.getLogger(__name__)
 
+    def get_memory(self):
+        """
+        Unified memory access method that handles different PyBoy API versions.
+        
+        Returns:
+            Memory object or None if access fails
+        """
+        if not self.pyboy:
+            return None
+            
+        try:
+            # Try the newer PyBoy API first
+            memory = self.pyboy.memory
+            return memory
+        except (AttributeError, TypeError):
+            try:
+                # Fallback to older API
+                memory = self.pyboy.get_memory()
+                return memory
+            except (AttributeError, TypeError):
+                # For latest PyBoy versions, try alternative access
+                try:
+                    if hasattr(self.pyboy, '_memory'):
+                        return self.pyboy._memory
+                    elif hasattr(self.pyboy, 'mbc'):
+                        return self.pyboy.mbc
+                except:
+                    pass
+                self.logger.warning("Could not access PyBoy memory - API compatibility issue")
+                return None
+
     def connect_emulator(self, emulator):
         """Connect to the emulator instance"""
         self.emulator = emulator
@@ -87,22 +118,9 @@ class AgentCore:
         # State detection
         game_state = None
         try:
-            # Get the PyBoy memory view if available
-            if self.pyboy:
-                try:
-                    # Try the newer PyBoy API
-                    memory = self.pyboy.memory
-                except (AttributeError, TypeError):
-                    # Fallback to older API if needed
-                    try:
-                        memory = self.pyboy.get_memory()
-                    except AttributeError:
-                        # For latest PyBoy versions, memory might be accessed differently
-                        try:
-                            memory = self.pyboy.memory
-                        except:
-                            # If all else fails, skip state detection for this cycle
-                            return
+            # Get the PyBoy memory view using unified method
+            memory = self.get_memory()
+            if memory:
                 game_state = self.state_detector.detect_state(memory)
                 self.logger.debug(f"Detected game state: {game_state}")
         except Exception as e:
@@ -127,23 +145,8 @@ class AgentCore:
         else:
             # Build prompt based on current state (only if memory access is working)
             try:
-                # Try to access memory to build the state
-                if self.pyboy:
-                    try:
-                        # Try the newer PyBoy API
-                        memory = self.pyboy.memory
-                    except (AttributeError, TypeError):
-                        # Fallback to older API if needed
-                        try:
-                            memory = self.pyboy.get_memory()
-                        except AttributeError:
-                            # For latest PyBoy versions, memory might be accessed differently
-                            try:
-                                memory = self.pyboy.memory
-                            except:
-                                memory = None
-                else:
-                    memory = None
+                # Try to access memory to build the state using unified method
+                memory = self.get_memory()
 
                 if memory:
                     location = f"Map: {self.memory_map.get_current_map_number(memory)}, X: {self.memory_map.get_player_coordinates(memory)[0]}, Y: {self.memory_map.get_player_coordinates(memory)[1]}"
@@ -305,7 +308,9 @@ class AgentCore:
         """Dynamically adjust frame skip based on game state and performance"""
         # Simple heuristic: skip more frames when in battle or menu
         try:
-            game_state = self.state_detector.detect_state()
+            # Try to get memory from emulator for state detection using unified method
+            memory = self.get_memory()
+            game_state = self.state_detector.detect_state(memory)
             if str(game_state).lower() in ['battle', 'menu', 'dialog']:
                 self.frame_skip = min(self.frame_skip + 1, self.max_frames_to_skip)
             else:

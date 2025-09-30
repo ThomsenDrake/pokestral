@@ -7,12 +7,17 @@ import logging
 
 # Load environment variables from .env file if it exists
 from pathlib import Path
-env_path = Path(__file__).parent.parent.parent / '.env'  # Go up to project root
+env_path = Path(__file__).parent.parent / '.env'  # Go up to project root from agent_core/
 if env_path.exists():
-    from dotenv import load_dotenv
-    load_dotenv(env_path)
+    # Manually load .env file without dotenv dependency
+    with open(env_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip()
 else:
-    # If dotenv is not available, try to import it
+    # If .env not found, try dotenv as fallback
     try:
         from dotenv import load_dotenv
         load_dotenv()  # Try to load from current directory

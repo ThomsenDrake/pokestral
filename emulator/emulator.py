@@ -95,6 +95,7 @@ class PokemonEmulator:
         self.input_queue = queue.Queue()
         self.input_thread: Optional[threading.Thread] = None
         self._processing_inputs = False
+        self._input_lock = threading.Lock()
 
         # Screenshot cache
         self.last_screenshot: Optional[np.ndarray] = None
@@ -363,8 +364,9 @@ class PokemonEmulator:
             return False
 
         try:
-            # Add to input queue
-            self.input_queue.put((button_lower, duration))
+            # Add to input queue with thread safety
+            with self._input_lock:
+                self.input_queue.put((button_lower, duration))
 
             if self.on_input_callback:
                 self.on_input_callback(button, duration)
@@ -392,10 +394,11 @@ class PokemonEmulator:
 
     def _process_input_queue(self):
         """Process queued input actions."""
-        if self._processing_inputs or not self.pyboy:
-            return
+        with self._input_lock:
+            if self._processing_inputs or not self.pyboy:
+                return
 
-        self._processing_inputs = True
+            self._processing_inputs = True
 
         try:
             while not self.input_queue.empty():
@@ -420,7 +423,8 @@ class PokemonEmulator:
         except Exception as e:
             logger.error(f"Error processing inputs: {e}")
         finally:
-            self._processing_inputs = False
+            with self._input_lock:
+                self._processing_inputs = False
 
     def _start_input_thread(self):
         """Start the input processing thread."""
@@ -491,8 +495,10 @@ class PokemonEmulator:
                             import io
                             screenshot_bytes = self.pyboy.screenshot()
                             from PIL import Image
-                            pil_image = Image.open(io.BytesIO(screenshot_bytes))
-                            screenshot_array = np.array(pil_image.convert('RGB'))
+                            # Use context manager to ensure proper cleanup
+                            with io.BytesIO(screenshot_bytes) as byte_stream:
+                                with Image.open(byte_stream) as pil_image:
+                                    screenshot_array = np.array(pil_image.convert('RGB'))
                         else:
                             # If all else fails, return None
                             return None
@@ -523,7 +529,7 @@ class PokemonEmulator:
         Returns:
             bool: True if saved successfully
         """
-        screenshot = self.last_screenshot or self.get_screenshot()
+        screenshot = self.last_screenshot if self.last_screenshot is not None else self.get_screenshot()
         if screenshot is None:
             return False
 
@@ -533,10 +539,26 @@ class PokemonEmulator:
 
             # Convert to PIL Image and save
             # Check the number of dimensions safely
-            if hasattr(screenshot, 'ndim') and screenshot.ndim == 3:
-                image = Image.fromarray(screenshot)
-            else:
-                image = Image.fromarray(screenshot, mode='L')
+            try:
+                if screenshot is None:
+                    logger.error("Screenshot is None")
+                    return False
+                    
+                if hasattr(screenshot, 'ndim'):
+                    if screenshot.ndim == 3:
+                        image = Image.fromarray(screenshot)
+                    elif screenshot.ndim == 2:
+                        image = Image.fromarray(screenshot, mode='L')
+                    else:
+                        logger.error(f"Unexpected screenshot dimensions: {screenshot.ndim}")
+                        return False
+                else:
+                    # Fallback for unknown array types
+                    image = Image.fromarray(screenshot)
+                    
+            except Exception as e:
+                logger.error(f"Error converting screenshot to PIL Image: {e}")
+                return False
 
             image.save(filepath)
             logger.info(f"Screenshot saved to: {filepath}")
