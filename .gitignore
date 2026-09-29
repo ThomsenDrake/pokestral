@@ -1,0 +1,17 @@
+.data/
+.env
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ROMs are copyrighted user-supplied assets and must never be committed.
+roms/*
+
+# A deployment bundle contains the user-supplied ROM and private Vibe configuration.
+deploy/koyeb/bundle/
+
+# Deployment-local Vibe provider and model configuration is private.
+deploy/koyeb/vibe-config.toml

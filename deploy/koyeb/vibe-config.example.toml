@@ -1,0 +1,9 @@
+# Public-safe Vibe settings. This file intentionally selects no concrete model.
+# Copy it to vibe-config.toml and add provider/model settings locally before
+# preparing a deployment bundle. vibe-config.toml is ignored by Git.
+default_agent = "pokemon-player"
+enable_update_checks = false
+enable_auto_update = false
+api_timeout = 720.0
+include_model_info = true
+include_project_context = true

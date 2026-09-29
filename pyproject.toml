@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokemon-vibe"
+version = "0.1.0"
+description = "Local Mistral Vibe autopilot for Nous Research pokemon-agent"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "pokemon-agent[dashboard,pyboy] @ https://github.com/NousResearch/pokemon-agent/archive/f8a03e4a8bc58f1d9dda6d677a7436cc832a57a9.tar.gz#sha256=9c2778c28292ff6f156d8e099b23cea21b2f7ace29c3337f8b77c8289e3cf0f8",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+  "ruff>=0.11,<1",
+]
+
+[project.scripts]
+pokemon-vibe = "pokemon_vibe.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
